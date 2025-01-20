@@ -1,4 +1,4 @@
-Build and compose postgres_container first
+# Build and compose postgres_container first
 
 
 PORTS:
