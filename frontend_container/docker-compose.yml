@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  taipy:
+    container_name: front-container
+    image: front-image
+    ports:
+      - "2425:5000"
+    networks:
+      - principal_network
+
+networks:
+  principal_network:
+    external: true

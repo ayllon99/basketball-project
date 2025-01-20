@@ -1,0 +1,22 @@
+services:
+  minio:
+    container_name: minio_container
+    hostname: minio_container
+    image: quay.io/minio/minio:latest
+    volumes:
+      - minio_volume:/data
+    ports:
+      - "9000:9000"
+      - "9090:9090"
+    environment:
+      - MINIO_ROOT_USER=root
+      - MINIO_ROOT_PASSWORD=rootroot
+    command: server --console-address ":9090" /data
+    networks:
+      - principal_network
+networks:
+  principal_network:
+    external: true
+
+volumes:
+  minio_volume:
