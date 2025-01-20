@@ -1,0 +1,17 @@
+services:
+  airflow-container:
+    container_name: airflow-container
+    image: airflow-image
+    volumes:
+      - ./airflow:/opt/airflow
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+    command: airflow standalone
+    networks:
+      - principal_network
+
+networks:
+  principal_network:
+    external: true

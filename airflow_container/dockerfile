@@ -1,0 +1,20 @@
+FROM apache/airflow:latest
+
+WORKDIR /app
+
+COPY . /app
+
+RUN pip install --trusted-host pypi.python.org -r requirements.txt
+
+USER root
+
+RUN apt-get update && \
+    apt-get -y install git && \
+    apt-get install -y wget unzip && \
+    #Use this if you need to run selenium in your airflow container instead of a external container
+    #wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+    #apt install -y ./google-chrome-stable_current_amd64.deb && \
+    #rm google-chrome-stable_current_amd64.deb && \
+    apt-get clean
+
+USER airflow

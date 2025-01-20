@@ -1,0 +1,8 @@
+{
+    "url_primera_feb": "https://baloncestoenvivo.feb.es/resultados/primerafeb/1/2024",
+    "url_segunda_feb": "https://baloncestoenvivo.feb.es/resultados/segundafeb/2/2024",
+    "url_tercera_feb": "https://baloncestoenvivo.feb.es/resultados/tercerafeb/3/2024",
+    "minio_key": "1eTECadkp9l15cVUc3Kc",
+    "minio_pass_key": "TakZoqqGLlUN82ogGd1lG4AY3qccmNhmeuTpFRYb",
+    "minio_bucket": "player-image"
+}

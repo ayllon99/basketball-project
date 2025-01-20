@@ -1,0 +1,12 @@
+selenium == 4.18.0
+selenium-wire == 5.1.0
+webdriver-manager == 4.0.1
+pymongo == 4.6.1
+numpy == 1.26.4
+blinker == 1.7.0
+beautifulsoup4 == 4.12.3
+bs4 == 0.0.2
+pandas == 2.2.0
+jsonschema == 4.21.1
+DateTime == 5.5
+minio == 7.2.12
