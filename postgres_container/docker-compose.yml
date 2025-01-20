@@ -1,0 +1,38 @@
+services:
+  postgres_container:
+    container_name: postgres_container
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    networks:
+      - principal_network
+  
+  pgadmin4_latest:
+    container_name: pgadmin4_latest
+    image: pgadmin-image-latest
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    volumes:
+      - ./sql_files:/var/lib/pgadmin/storage/admin_admin.com
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres_container
+    networks:
+      - principal_network
+
+volumes:
+  postgres-db-volume:
+    name: postgres-db-volume
+
+networks:
+  principal_network:
+    name: principal_network
