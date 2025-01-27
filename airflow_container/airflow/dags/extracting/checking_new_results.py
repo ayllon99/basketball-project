@@ -7,6 +7,16 @@ from extracting.utils import browser
 
 
 def check_page(driver, match_day):
+    """Checks a webpage for new match results.
+
+    Args:
+        driver (object): The webdriver used to interact with the webpage.
+        match_day (int): The match day to select on the webpage.
+
+    Returns:
+        bool: Whether all matches on the page have been successfully extracted.
+
+    """
     driver.find_element(
         By.XPATH,
         f'/html/body/form/div[4]/div[2]/div[3]/select[3]/option[{match_day}]')\
@@ -32,6 +42,21 @@ def check_page(driver, match_day):
 
 
 def check_new_stages(driver, dates_left, url):
+    """
+    Checks for new stages on a webpage.
+
+    Args:
+        driver (object): The web driver object used to navigate the webpage.
+        dates_left (dict): A dictionary containing the current stages and their
+                           corresponding dates.
+        url (str): The URL of the webpage to check for new stages.
+
+    Returns:
+        tuple: A tuple containing two values:
+            - detected (bool): True if new stages are detected, else False.
+            - new_detected (list): A list of IDs of the new stages detected.
+
+    """
     driver.get(url)
     time.sleep(3)
     try:
@@ -54,6 +79,27 @@ def check_new_stages(driver, dates_left, url):
 
 
 def new_results(ti, **op_kwargs):
+    """
+    Checks for new results by comparing existing dates with the ones available
+    on the webpage.
+
+    Args:
+        ti: An instance of the TaskInstance object from Airflow.
+        **op_kwargs: Keyword arguments containing the URL and file path.
+            - url (str): The URL of the webpage to scrape.
+            - file_path (str): The path to the file containing the existing
+                               dates.
+
+    Returns:
+        bool: True if new results are found, False otherwise.
+
+    Notes:
+        This function uses a web driver to navigate to the webpage, extracts
+        the existing dates from the file, and checks for new stages and dates
+        to scrape. If new results are found, it triggers the evaluator by
+        pushing a value to the XCom and returns True.
+
+    """
     url = op_kwargs['url']
     file_path = op_kwargs['file_path']
     driver = browser.open_browser()

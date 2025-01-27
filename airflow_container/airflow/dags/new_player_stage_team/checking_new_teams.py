@@ -1,19 +1,30 @@
-import pandas as pd
-from bs4 import BeautifulSoup as bs
-import time
-from seleniumwire import webdriver
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 import pandas as pd
 from bs4 import BeautifulSoup as bs
 import time
-from seleniumwire import webdriver
 from selenium.webdriver.common.by import By
-
-
-teams_link = 'https://baloncestoenvivo.feb.es/Equipo.aspx?i='
+from ..extracting.utils import browser
+from ..env_variables import *
 
 
 def getting_sql_query(ti):
+    """
+    Retrieves scraped team data and constructs an SQL INSERT query.
+
+    This function pulls data from the previous task in an Airflow DAG, 
+    processes it into a structured format suitable for an SQL query, 
+    and returns both the query string and the corresponding values.
+
+    Args:
+        ti (TaskInstance): The TaskInstance object from Airflow, used to pull
+                           XCom data.
+
+    Returns:
+        tuple: A tuple containing:
+            - str: The SQL INSERT query string.
+            - list: A flattened list of values to be inserted into the
+                    database.
+    """
     df = ti.xcom_pull(task_ids='scraping_new_teams', key='teams_found')
     columns_sql = ', '.join([f'"{col}"' for col in df.columns])
     placeholders = ', '.join(['%s'] * len(df.columns))
@@ -27,6 +38,19 @@ def getting_sql_query(ti):
 
 
 def inserting_teams(ti, **op_kwargs):
+    """
+    Inserts new teams into the PostgreSQL database using the provided SQL query
+    and parameters.
+
+    Args:
+        ti (TaskInstance): The TaskInstance object from Airflow.
+        **op_kwargs: Additional keyword arguments containing the connection
+                     details.
+        
+    The function retrieves the PostgreSQL connection from op_kwargs, constructs
+    the SQL query and parameters, prints them for logging, and then executes
+    the query using SQLExecuteQueryOperator with autocommit enabled.
+    """
     postgres_connection = op_kwargs['postgres_connection']
     query, params = getting_sql_query(ti)
     print(query, params)
@@ -39,33 +63,45 @@ def inserting_teams(ti, **op_kwargs):
     ).execute(params)
 
 
-def open_browser():
-    # Address of the machine running Selenium Wire.
-    # Explicitly use 127.0.0.1 rather than localhost if remote session is
-    # running locally.
-    sw_options = {
-        'addr': '0.0.0.0',
-        'auto_config': False,
-        'port': 35811
-        }
-
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('--proxy-server=airflow-container:35811')
-    chrome_options.add_argument('--ignore-certificate-errors')
-
-    driver = webdriver.Remote(
-        command_executor="http://selenium-hub:4444",
-        options=chrome_options,
-        seleniumwire_options=sw_options
-        )
-    return driver
-
-
 def navigating_website(ti, **op_kwargs):
+    """
+    Navigates through a series of websites to extract team information and
+    updates the database.
+
+    This function is part of an Airflow DAG workflow. It uses browser
+    automation to scrape team data from multiple web pages, checks against
+    existing team IDs, and updates the database with newly found teams.
+
+    Args:
+        ti (TaskInstance): The Airflow TaskInstance object used to pull and
+        push data via XCom.
+        **op_kwargs: Additional keyword arguments containing the URLs to
+                    navigate:
+            - url_primera (str): URL for the first division teams.
+            - url_segunda (str): URL for the second division teams.
+            - url_tercera (str): URL for the third division teams.
+
+    Returns:
+        None
+            - This function does not return a value but pushes a DataFrame
+            containing the found teams to XCom with the key 'teams_found'.
+
+    Raises:
+        Exception: If there is an error during browser navigation or data
+                   extraction.
+
+    Note:
+        - The function uses Selenium for browser automation and BeautifulSoup
+        for HTML parsing.
+        - The browser instance is properly quit at the end of the function to
+        clean up resources.
+        - The resulting DataFrame contains columns for team_id, team_name, and
+        year.
+    """
     urls = [op_kwargs['url_primera'],
             op_kwargs['url_segunda'],
             op_kwargs['url_tercera']]
-    driver = open_browser()
+    driver = browser.open_browser()
     result = ti.xcom_pull(task_ids='read_db_teams')
     result = ['952224', '952044']
     team_ids_found = []

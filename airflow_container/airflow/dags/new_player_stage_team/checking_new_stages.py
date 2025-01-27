@@ -1,11 +1,27 @@
 import pandas as pd
 from bs4 import BeautifulSoup as bs
 import time
-from seleniumwire import webdriver
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+from ..extracting.utils import browser
 
 
 def getting_sql_query(ti):
+    """
+    Retrieves scraped stage data and constructs an SQL INSERT query.
+
+    This function pulls the scraped stage data from the previous task,
+    formats it into SQL-compatible strings, and prepares the values for
+    insertion into the database.
+
+    Args:
+        ti: The TaskInstance object containing the context and
+            information about the task execution.
+
+    Returns:
+        tuple: A tuple containing:
+            - str: The formatted SQL INSERT query string
+            - list: A flattened list of values to be inserted
+    """
     df = ti.xcom_pull(task_ids='scraping_new_stages',
                       key='stages_found')
     columns_sql = ', '.join([f'"{col}"' for col in df.columns])
@@ -20,6 +36,28 @@ def getting_sql_query(ti):
 
 
 def inserting_stages(ti, **op_kwargs):
+    """
+    Inserts stages data into a PostgreSQL database table.
+
+    This function serves as an Airflow task that executes a SQL query to insert
+    new stages data.
+    It retrieves the SQL query and parameters from the `getting_sql_query`
+    function and executes it using Airflow's `SQLExecuteQueryOperator`.
+
+    Args:
+        ti (TaskInstance): The Airflow TaskInstance object.
+        **op_kwargs: Additional keyword arguments passed to the Airflow
+                     operator.
+            - postgres_connection (str): The connection ID for the PostgreSQL
+                                         database.
+
+    Returns:
+        None
+
+    Raises:
+        KeyError: If the required `postgres_connection` is not found in
+                  `op_kwargs`.
+    """
     postgres_connection = op_kwargs['postgres_connection']
     query, params = getting_sql_query(ti)
     print(query, params)
@@ -32,33 +70,27 @@ def inserting_stages(ti, **op_kwargs):
     ).execute(params)
 
 
-def open_browser():
-    # Address of the machine running Selenium Wire.
-    # Explicitly use 127.0.0.1 rather than localhost
-    # if remote session is running locally.
-    sw_options = {
-        'addr': '0.0.0.0',
-        'auto_config': False,
-        'port': 35812
-        }
-
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('--proxy-server=airflow-container:35812')
-    chrome_options.add_argument('--ignore-certificate-errors')
-
-    driver = webdriver.Remote(
-        command_executor="http://selenium-hub:4444",
-        options=chrome_options,
-        seleniumwire_options=sw_options
-        )
-    return driver
-
-
 def navigating_website(ti, **op_kwargs):
+    """Navigates through a list of specified websites to extract stage
+    information.
+
+    This function uses a browser driver to visit each website, parse the HTML
+    content, and extract stage IDs and names. It compares the found stages with
+    a list of expected stage IDs and collects information for stages that
+    match.
+
+    Args:
+        ti (TaskInstance): The task instance object from Airflow.
+        **op_kwargs: Additional keyword arguments containing the URLs to visit.
+            Expected keys are 'url_primera', 'url_segunda', and 'url_tercera'.
+
+    Returns:
+        None
+    """
     urls = [op_kwargs['url_primera'],
             op_kwargs['url_segunda'],
             op_kwargs['url_tercera']]
-    driver = open_browser()
+    driver = browser.open_browser()
     result = ti.xcom_pull(task_ids='read_db_stages')
     stage_ids = []
     stage_names = []

@@ -4,25 +4,33 @@ from airflow.operators.python import PythonOperator
 from airflow.exceptions import AirflowFailException
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.utils.task_group import TaskGroup
-from airflow.models import Variable
+from env_variables import *
 import new_player_stage_team.inserting_new_players as inserting_new_players
 import new_player_stage_team.checking_new_players as checking_new_players
 import new_player_stage_team.checking_new_stages as checking_new_stages
 import new_player_stage_team.checking_new_teams as checking_new_teams
 
 
-url_primera = Variable.get(key='url_primera_feb')
-url_segunda = Variable.get(key='url_segunda_feb')
-url_tercera = Variable.get(key='url_tercera_feb')
-
-minio_key = Variable.get(key='minio_key')
-minio_pass_key = Variable.get(key='minio_pass_key')
-minio_bucket = Variable.get(key='minio_bucket')
-
-postgres_connection = 'cbmoron_dev'
-
-
 def trigger_evaluator_player(ti):
+    """
+    Triggers the evaluation of new players by checking if there are new player
+    records in the database. Raises an exception if no new players are found.
+
+    Args:
+        ti (TaskInstance): The TaskInstance object from Airflow that provides
+            access to the context and methods like xcom_pull.
+
+    Returns:
+        None
+
+    Raises:
+        AirflowFailException: If no new players are found in the database.
+
+    Note:
+        This function pulls XCom data from the 'read_db_player' task. The data
+        is expected to be a list of new player records. If the list is empty,
+        an exception is raised to fail the DAG execution.
+    """
     result = ti.xcom_pull(task_ids='read_db_player')
     # print(result)
     print('---')
@@ -34,6 +42,19 @@ def trigger_evaluator_player(ti):
 
 
 def trigger_evaluator_stage(ti):
+    """
+    Checks if there are new stages in the database and either proceeds or
+    raises an exception.
+
+    Args:
+        ti (TaskInstance): The TaskInstance object from Airflow.
+
+    Returns:
+        None
+
+    Raises:
+        AirflowFailException: If no new stages are found in the database.
+    """
     result = ti.xcom_pull(task_ids='read_db_stages')
     # print(result)
     print('---')
@@ -45,6 +66,22 @@ def trigger_evaluator_stage(ti):
 
 
 def trigger_evaluator_team(ti):
+    """
+    Triggers the team evaluator by checking for new teams in the database.
+
+    This function pulls data from the 'read_db_teams' task using XCom. If no
+    new teams are found, it raises an AirflowFailException. Otherwise, it
+    proceeds to scrape the data of the new teams.
+
+    Args:
+        ti (TaskInstance): The TaskInstance object from Airflow.
+
+    Returns:
+        None
+
+    Raises:
+        AirflowFailException: If no new teams are found in the database.
+    """
     result = ti.xcom_pull(task_ids='read_db_teams')
     # print(result)
     print('---')

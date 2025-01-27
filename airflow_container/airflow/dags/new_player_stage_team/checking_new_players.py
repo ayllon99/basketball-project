@@ -1,42 +1,35 @@
 import pandas as pd
 from bs4 import BeautifulSoup as bs
 import time
-from seleniumwire import webdriver
 from selenium.webdriver.common.by import By
 from datetime import datetime
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from minio import Minio
 import io
-
-
-teams_link = 'https://baloncestoenvivo.feb.es/Equipo.aspx?i='
-
-
-def open_browser():
-    # Address of the machine running Selenium Wire.
-    # Explicitly use 127.0.0.1 rather than localhost
-    # if remote session is running locally.
-    sw_options = {
-        'addr': '0.0.0.0',
-        'auto_config': False,
-        'port': 35813
-        }
-
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('--proxy-server=airflow-container:35813')
-    chrome_options.add_argument('--ignore-certificate-errors')
-
-    driver = webdriver.Remote(
-        command_executor="http://selenium-hub:4444",
-        options=chrome_options,
-        seleniumwire_options=sw_options
-        )
-    return driver
+from ..env_variables import *
+from ..extracting.utils import browser
 
 
 def insert_player_image(driver, player_id, minio_api_key,
                         minio_pass_key, minio_bucket):
+    """
+    Inserts a player's image into a MinIO bucket.
+
+    Args:
+        driver: The webdriver used to make requests.
+        player_id (str): The ID of the player to fetch the image for.
+        minio_api_key (str): The API key for MinIO authentication.
+        minio_pass_key (str): The password key for MinIO authentication.
+        minio_bucket (str): The name of the MinIO bucket to store the image in.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If there is an error connecting to MinIO or inserting the
+                   image.
+    """
     photo_link = f'https://imagenes.feb.es/Foto.aspx?c={player_id}'
     for req in driver.requests:
         if req.url == photo_link:
@@ -70,6 +63,36 @@ def insert_player_image(driver, player_id, minio_api_key,
 
 
 def info_table_scraper(info_table, player_id, player_name, player_link):
+    """
+    Scrapes player information from a given info_table and returns a DataFrame.
+
+    Args:
+        info_table: A BeautifulSoup object containing player information divs.
+        player_id (str): The player's unique identifier.
+        player_name (str): The player's full name.
+        player_link (str): URL linking to the player's detailed page.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing player information with the
+                      following columns:
+            - player_id (int): Unique player identifier.
+            - player_name (str): Player's full name.
+            - position (str, optional): Player's position on the team. None if
+                                        extraction fails.
+            - height (int, optional): Player's height in centimeters. None if
+                                      extraction fails.
+            - weight (int, optional): Player's weight in kilograms. None if
+                                      extraction fails.
+            - birthday (date, optional): Player's date of birth. None if
+                                         extraction fails.
+            - nationality (str, optional): Player's nationality. None if
+                                           extraction fails.
+            - player_link (str): URL to the player's detailed information.
+
+    Note:
+        Each data extraction is wrapped in a try-except block. If an extraction
+        fails, the corresponding field is set to None.
+    """
     divs = info_table.find_all('div')
     try:
         position = divs[2].find('span', {'class': 'string'})\
@@ -106,6 +129,38 @@ def info_table_scraper(info_table, player_id, player_name, player_link):
 
 
 def career_path_scraper(career_path_table, player_id):
+    """
+    Scrapes a player's career path data from a given table and returns it as a
+    pandas DataFrame.
+
+    Args:
+        career_path_table (bs4.BeautifulSoup.Tag): A BeautifulSoup Tag object
+                                                   representing the career path
+                                                   table.
+        player_id (str): The ID of the player as an integer string.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the player's career details, with
+                      the following columns:
+            - player_id (int): The ID of the player.
+            - season (str): The season during which the player was part of the
+                            team.
+            - league (str): The league in which the player participated.
+            - team_id (int, None): The ID of the team the player was part of.
+                                   None if extraction fails.
+            - license (str, None): The license associated with the team. None
+                                   if extraction fails.
+            - date_in (date, None): The date the player joined the team,
+                                    formatted as YYYY-MM-DD. None if extraction
+                                    fails.
+            - date_out (date, None): The date the player left the team,
+                                     formatted as YYYY-MM-DD. None if
+                                     extraction fails.
+
+    Note:
+        The function handles exceptions during data extraction, which may
+        result in None values for some fields if the data cannot be retrieved.
+    """
     trs = career_path_table.find('tbody').find_all('tr')[1:]
     player_ids = []
     seasons = []
@@ -158,6 +213,34 @@ def career_path_scraper(career_path_table, player_id):
 
 
 def stats_scraper(totals_stats_table, player_id, season, team_name):
+    """
+    Processes a basketball statistics table to extract and calculate various
+    player statistics.
+
+    Args:
+        player_id (int): The unique identifier for the player.
+        totals_stats_table (bs4.Tag): A Beautiful Soup table element containing
+                                      the player's statistics.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the processed player statistics,
+                      including:
+            - Basic statistics (minutes, points, rebounds, assists, etc.)
+            - Shooting percentages and averages (2-pointers, 3-pointers,
+                                                 free throws)
+            - Advanced statistics (efficiency, turnovers, blocks, etc.)
+
+    Notes:
+        This function assumes that the input table follows a specific
+        structure, with statistics organized in rows and columns that can be
+        parsed systematically.
+        The function handles potential errors in data extraction gracefully and
+        calculates averages where applicable.
+
+        The resulting DataFrame is constructed from lists that are populated
+        during the parsing process. Each row in the final DataFrame corresponds
+        to a season and stage of competition.
+    """
     player_ids = []
     seasons = []
     team_names = []
@@ -411,11 +494,31 @@ def stats_scraper(totals_stats_table, player_id, season, team_name):
 
 
 def navigating_website(ti, **op_kwargs):
+    """
+    Navigates a website to extract player information, career paths, and
+    statistics.
+
+    Args:
+        ti: TaskInstance object used to pull and push data via XCom.
+        **op_kwargs: Dictionary containing the operator keyword arguments.
+            - minio_key (str): MinIO API key for storage access.
+            - minio_pass_key (str): MinIO password key for storage access.
+            - minio_bucket (str): Name of the MinIO bucket to store data in.
+
+    Returns:
+        None
+            - Pushes player information, career paths, and statistics to XCom
+              for each player.
+              - Key format for player information: '{player_id}_players_info'
+              - Key format for career paths: '{player_id}_players_career_path'
+              - Key format for statistics: '{player_id}_players_stats_career'
+
+    """
     minio_api_key = op_kwargs['minio_key']
     minio_pass_key = op_kwargs['minio_pass_key']
     minio_bucket = op_kwargs['minio_bucket']
 
-    driver = open_browser()
+    driver = browser.open_browser()
     result = ti.xcom_pull(task_ids='read_db_player')
     for a in result:
         player_id = a[0]

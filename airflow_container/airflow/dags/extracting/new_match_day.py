@@ -8,14 +8,24 @@ import io
 import json
 from datetime import datetime
 from extracting.utils import browser
-
-
-pre_match_link = 'https://baloncestoenvivo.feb.es/Partido.aspx?p='
-pre_player_link = 'https://baloncestoenvivo.feb.es/jugador'
-json_shots_link = 'https://intrafeb.feb.es/LiveStats.API/api/v1/ShotChart'
+from ..env_variables import *
 
 
 def partials_scraper(soup, match_id):
+    """
+    Extracts partial scores from a match webpage and returns a pandas
+    DataFrame.
+
+    Args:
+        soup (object): The BeautifulSoup object representing the HTML content
+                       of the webpage.
+        match_id (int): The unique identifier for the match.
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing the partial scores for the
+                          home and away teams.
+
+    """
     try:
         home_partials = [int(a.text) for a in
                          soup.find('div', {'class': 'fila parciales'})
@@ -40,44 +50,54 @@ def partials_scraper(soup, match_id):
 
 
 def dictionary_team_names(soup):
+    """
+    Extracts team names and IDs from a given HTML soup and returns a
+    dictionary.
+
+    Args:
+        soup (BeautifulSoup): The HTML soup to extract team information from.
+
+    Returns:
+        dict: A dictionary where the keys are team IDs and the values are
+              dictionaries containing the team name and whether the team is
+              playing at home or away.
+
+    Notes:
+        This function assumes that the HTML soup has a specific structure, with
+        team information contained in div elements with specific class names.
+    """
     teams_dict = {}
-
-    home_team_link = soup.find(
-        'div', {'class': 'box-marcador tableLayout de tres columnas'
-                }
-    ).find('div', {'class': 'columna equipo local'
-                   }).find('span', {'class': 'nombre'
-                                    }).find('a').get('href')
-    home_team_id = home_team_link.split('=')[1]
-    home_team_name = soup.find(
-        'div', {'class': 'box-marcador tableLayout de tres columnas'
-                }
-    ).find('div', {'class': 'columna equipo local'
-                   }).find('span', {'class': 'nombre'
-                                    }).find('a').text.strip()
-    teams_dict[home_team_id] = {'team_name': home_team_name,
-                                'home_away': 'Home'}
-
-    away_team_link = soup.find(
-        'div', {'class': 'box-marcador tableLayout de tres columnas'
-                }
-    ).find('div', {'class': 'columna equipo visitante'
-                   }).find('span', {'class': 'nombre'
-                                    }).find('a').get('href')
-    away_team_id = away_team_link.split('=')[1]
-    away_team_name = soup.find(
-        'div', {'class': 'box-marcador tableLayout de tres columnas'
-                }
-    ).find('div', {'class': 'columna equipo visitante'
-                   }).find('span', {'class': 'nombre'
-                                    }).find('a').text.strip()
-    teams_dict[away_team_id] = {'team_name': away_team_name,
-                                'home_away': 'Away'}
+    teams = [('local', 'Home'), ('visitante', 'Away')]
+    for team_type, home_away in teams:
+        team_link = soup\
+            .find('div', {'class':
+                          'box-marcador tableLayout de tres columnas'})\
+            .find('div', {'class': f'columna equipo {team_type}'})\
+            .find('span', {'class': 'nombre'})\
+            .find('a')
+        team_id = team_link.get('href').split('=')[1]
+        team_name = team_link.text.strip()
+        teams_dict[team_id] = {'team_name': team_name,
+                               'home_away': home_away}
 
     return teams_dict
 
 
 def table_scraper(teams_dict, rows, match_id, home_away):
+    """
+    Scrapes player statistics from HTML table rows for a given match day.
+
+    Args:
+        teams_dict (dict): Dictionary containing team information with keys as
+                           team IDs.
+        rows (list): List of HTML table rows to scrape data from.
+        match_id (str): ID of the current match.
+        home_away (str): Indicates whether the team is playing at home or away.
+
+    Returns:
+        tuple: A tuple containing a pandas DataFrame with player statistics and
+               a dictionary mapping player numbers to their IDs and names.
+    """
     try:
         players_dict = {'Home': {}, 'Away': {}}
         match_ids = []
@@ -269,6 +289,26 @@ def table_scraper(teams_dict, rows, match_id, home_away):
 
 
 def totals_scraper(teams_dict, rows, match_id, home_away):
+    """
+    Scrapes and processes basketball match statistics from HTML data.
+
+    Args:
+        teams_dict (dict): Dictionary containing team information.
+            Each key is a team ID, and each value is another dictionary with
+            'home_away' status indicating whether the team is home or away.
+        rows (list): List of HTML row elements containing match statistics.
+        match_id (int): Unique identifier for the basketball match.
+        home_away (str): Indicates whether the statistics are for the home or
+                         away team.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the scraped statistics for the
+                      specified team in the match.
+                      The DataFrame includes columns for various statistics
+                      such as points, rebounds, assists, steals, turnovers,
+                      and more.
+
+    """
     try:
         team_id = int([a for a, b in teams_dict.items()
                        if teams_dict[a]['home_away'] == home_away][0])
@@ -347,6 +387,29 @@ def totals_scraper(teams_dict, rows, match_id, home_away):
 
 
 def is_two_or_three(top_point, left_point):
+    """
+    Determines whether a point falls into a 'two' or 'three' category based on
+    its position relative to predefined circular regions.
+
+    Args:
+        top_point (float): The vertical coordinate of the point.
+        left_point (float): The horizontal coordinate of the point.
+
+    Returns:
+        str: 'two' if the point is inside the circle, 'three' if outside, and
+             'three' if top_point is outside the specified ranges.
+
+    Note:
+        The function uses a scaling factor to normalize the top_point and
+        center_top values before calculating the distance.
+        The radius of the circle varies depending on the range in which
+        top_point falls:
+        - 21.5 for 11.8 ≤ top_point < 20 or 80 ≤ top_point ≤ 88.2
+        - 20 for 20 ≤ top_point < 30 or 70 ≤ top_point < 80
+        - 19 for 30 ≤ top_point < 70
+        If top_point is outside these ranges, the function returns 'three'.
+
+    """
     proportion = 647.39/361.89
     center_top = 50
     center_left = 10
@@ -376,6 +439,18 @@ def is_two_or_three(top_point, left_point):
 
 
 def is_paint(top_point, left_point):
+    """
+    Determines if a point falls within a specific range, likely indicating a
+    paint operation.
+
+    Args:
+        top_point (int): The vertical position of the point.
+        left_point (int): The horizontal position of the point.
+
+    Returns:
+        bool: True if top_point is between 38 and 62 and left_point is less
+              than 20, False otherwise.
+    """
     if top_point > 38 and top_point < 62 and left_point < 20:
         return True
     else:
@@ -383,6 +458,42 @@ def is_paint(top_point, left_point):
 
 
 def shooting_scraper(soup_shooting_chart, match_id, players_dict, teams_dict):
+    """
+    Scrapes shooting data from a given BeautifulSoup object containing a
+    shooting chart.
+
+    Args:
+        soup_shooting_chart (BeautifulSoup): The BeautifulSoup object
+                                             containing the shooting chart
+                                             data.
+        match_id (int): The ID of the match.
+        players_dict (dict): A dictionary mapping player numbers to their
+                             respective player IDs,
+            separated by home and away teams. Format: {home_away:
+                                                       {number: {'player_id':
+                                                                 id}}}.
+        teams_dict (dict): A dictionary containing team information. Each team
+                           should have a 'home_away' key indicating whether
+                           they are 'Home' or 'Away'.
+
+    Returns:
+        tuple: A tuple containing:
+            - pd.DataFrame: A DataFrame containing detailed shooting data for
+                            each shot.
+            - dict: A dictionary of shooting statistics, excluding three-point
+                    shots, grouped by player_id and shooting_type.
+
+    Raises:
+        Exception: If any error occurs during the scraping process, an error
+                   message is printed.
+
+    Notes:
+        The function classifies shots into different types
+        (Three, Zone, Middle) based on their position on the court.
+        The 'shooting_type' classification uses helper functions to determine
+        if a shot is a two-pointer or three-pointer, and whether it occurred in
+        the paint or not.
+    """
     try:
         print('shooting_scraper')
         shoots = soup_shooting_chart.find(
@@ -462,6 +573,21 @@ def shooting_scraper(soup_shooting_chart, match_id, players_dict, teams_dict):
 
 
 def twos_middle_stats(id, dictionary):
+    """
+    Calculate and format middle hitting statistics for a given player.
+
+    Args:
+        id: The unique identifier of the player.
+        dictionary: A dictionary containing game statistics where keys are
+                    tuples of the form (player_id, 'Middle', boolean) and
+                    values are counts of successful or unsuccessful middle
+                    plays.
+
+    Returns:
+        A formatted string showing the number of successful middle plays
+        divided by the total number of middle attempts.
+
+    """
     try:
         middle_in = dictionary[(id, 'Middle', True)]
     except Exception:
@@ -476,6 +602,22 @@ def twos_middle_stats(id, dictionary):
 
 
 def twos_zone_stats(id, dictionary):
+    """
+    Calculate and format zone statistics based on the provided data.
+
+    Args:
+        id: The unique identifier for the match or event.
+        dictionary: A dictionary containing zone data with keys as tuples
+            in the format (id, 'Zone', boolean).
+
+    Returns:
+        A formatted string representing zone statistics in the format
+        'zone_in/total_zone', where zone_in is the number of times the
+        zone was entered and total_zone is the sum of zone_in and zone_out.
+
+    Notes:
+        If the zone data is not found in the dictionary, it defaults to 0.
+    """
     try:
         zone_in = dictionary[(id, 'Zone', True)]
     except Exception:
@@ -490,6 +632,28 @@ def twos_zone_stats(id, dictionary):
 
 
 def new_columns_players(table_df, dict_to_process):
+    """
+    This function processes a DataFrame containing player statistics to
+    extract and calculate various shooting metrics. It adds new columns
+    for middle and zone shooting statistics, breaking them down into made
+    shots, attempted shots, and percentage.
+
+    Args:
+        table_df (DataFrame): DataFrame containing player statistics
+        dict_to_process (dict): Dictionary containing shooting statistics data
+
+    Returns:
+        DataFrame: Modified DataFrame with additional shooting statistics
+                   columns
+
+    The function adds the following new columns:
+    - middle_shootings_in: Number of made middle shots
+    - middle_shootings_tried: Number of attempted middle shots
+    - middle_shootings_perc: Percentage of made middle shots
+    - zone_shootings_in: Number of made zone shots
+    - zone_shootings_tried: Number of attempted zone shots
+    - zone_shootings_perc: Percentage of made zone shots
+    """
     print('new_columns_players')
     table_df['middle_shootings'] = table_df['player_id']\
         .apply(twos_middle_stats, dictionary=dict_to_process)
@@ -517,6 +681,25 @@ def new_columns_players(table_df, dict_to_process):
 
 
 def new_columns_teams(players_matches_stats, totals_df):
+    """
+    Calculate and add shooting statistics for home and away teams to the totals
+    DataFrame.
+
+    This function computes middle and zone shooting statistics for both teams
+    in a match. It calculates the number of successful shots, attempted shots,
+    and the percentage of successful shots for each type of shooting
+    (middle and zone). These statistics are then added as new columns to the
+    totals_df DataFrame.
+
+    Args:
+        players_matches_stats (DataFrame): DataFrame containing player match
+                                           statistics.
+        totals_df (DataFrame): DataFrame where the new columns will be added.
+
+    Returns:
+        DataFrame: The updated totals_df with the new shooting statistics
+                   columns.
+    """
     print('new_columns_teams')
     team_ids = [int(a) for a in totals_df['team_id'].tolist()]
     home_middle_in = players_matches_stats[
@@ -563,6 +746,21 @@ def new_columns_teams(players_matches_stats, totals_df):
 
 
 def get_shots_json(driver, match_id):
+    """
+    Fetches and processes shot chart data for a specific match from the
+    driver's requests.
+
+    Args:
+        driver: The Selenium webdriver instance used to make HTTP requests.
+        match_id (str): The unique identifier for the match.
+
+    Returns:
+        list: A list of shot data extracted from the JSON response.
+
+    Note:
+        This function handles exceptions internally and returns None in case of
+        an error.
+    """
     try:
         time.sleep(5)
         print('Gets_shots_json')
@@ -583,6 +781,27 @@ def get_shots_json(driver, match_id):
 
 
 def new_time_column(shooting_df, data):
+    """
+    Extracts and adds shoot time from data to the shooting DataFrame.
+
+    Args:
+        shooting_df (pandas.DataFrame): DataFrame containing shooting events.
+        data (list): List of dictionaries containing event data for matches.
+
+    Returns:
+        pandas.DataFrame: Updated DataFrame with 'shoot_time' column added.
+
+    The function performs the following steps:
+    - Initializes a new 'shoot_time' column filled with 'Nan'
+    - Iterates through each row in the DataFrame
+    - For each shooting event, it searches for matching time data
+    - Processes the time data and updates the 'shoot_time' column accordingly
+    - Handles cases where no time is found or multiple ambiguous times exist
+
+    Raises:
+        Exception: If any error occurs during the process, it prints an error
+                   message.
+    """
     try:
         print('new_time_column')
         shooting_df['shoot_time'] = ['Nan'] * len(shooting_df)
@@ -637,6 +856,46 @@ def new_time_column(shooting_df, data):
 
 
 def start_scraping(driver, url):
+    """
+    Scrapes football match data from a given URL using Selenium and
+    BeautifulSoup.
+
+    This function navigates to the provided URL, extracts various statistics,
+    and processes the data into structured formats. It handles exceptions
+    internally and returns None for any data that could not be retrieved.
+
+    Args:
+        driver: The Selenium webdriver instance used for browser automation.
+        url (str): The URL of the match page to scrape.
+
+    Returns:
+        tuple: A tuple containing:
+            - match_id (int): The ID of the scraped match.
+            - data (dict): JSON data containing shot information, or None if
+                           unavailable.
+            - match_partials (dict): Partial match data, or None if
+                                     unavailable.
+            - players_matches_stats (pd.DataFrame): Player statistics, or None
+                                                    if unavailable.
+            - teams_match_stats (pd.DataFrame): Team statistics, or None if
+                                                unavailable.
+            - shooting_df (pd.DataFrame): Shooting chart data, or None if
+                                          unavailable.
+            - shooting_charts_availability (pd.DataFrame): Availability status
+                                                           of shooting charts.
+
+    Raises:
+        Exception: Any exceptions are caught and handled internally, with
+                   relevant data set to None.
+
+    Notes:
+        - This function uses Selenium for browser automation and BeautifulSoup
+        for HTML parsing.
+        - Data is structured into pandas DataFrames for easy data manipulation
+        and analysis.
+        - Shooting charts are processed separately and their availability is
+        tracked.
+    """
     try:
         shooting_charts = []
         charts_availability = []
@@ -722,6 +981,28 @@ def start_scraping(driver, url):
 
 
 def match_day(ti):
+    """
+    This function coordinates the extraction of match data from multiple stages
+    and match days.
+    
+    It pulls stage IDs and their corresponding match days from XCom, then
+    iterates through each match to collect URLs for further scraping. For each
+    URL, it navigates to the page, scrapes the data, and pushes the results
+    back into XCom for downstream tasks.
+    
+    Args:
+        ti (TaskInstance): The Airflow TaskInstance object used for XCom
+                           communication.
+        
+    Returns:
+        str: A string indicating the number of matches processed.
+        
+    Side Effects:
+        - Pulls data from XCom using task IDs and keys
+        - Uses a browser instance for scraping
+        - Pushes multiple datasets into XCom for downstream tasks
+        - Quits the browser instance after processing
+    """
     driver = browser.open_browser()
 
     stages_ids = ti.xcom_pull(task_ids='evaluate_matchdays', key='groups')

@@ -7,6 +7,21 @@ from extracting.utils import browser
 
 
 def check_page(driver, match_day):
+    """
+    Checks if all matches on a given page have been successfully extracted.
+
+    Args:
+        driver (webdriver): The Selenium webdriver object used to interact with the webpage.
+        match_day (int): The match day to select from the dropdown menu.
+
+    Returns:
+        bool: True if all matches have been successfully extracted, False otherwise.
+
+    Notes:
+        This function assumes that the webpage has a specific structure, with a dropdown menu
+        containing match days and a table of matches. It uses Selenium to select the match day
+        and then parses the HTML of the page using BeautifulSoup to extract the match links.
+    """
     driver.find_element(
         By.XPATH,
         f'/html/body/form/div[4]/div[2]/div[3]/select[3]/option[{match_day}]')\
@@ -33,6 +48,21 @@ def check_page(driver, match_day):
 
 
 def check_new_stages(driver, dates_left, url):
+    """
+    Checks for new stages on a webpage.
+
+    Args:
+        driver (object): The web driver used to access the webpage.
+        dates_left (dict): A dictionary containing the existing stages.
+        url (str): The URL of the webpage to check.
+
+    Returns:
+        tuple: A boolean indicating whether new stages were detected and a list
+               of the new stage IDs.
+
+    Notes:
+        This function uses BeautifulSoup to parse the HTML content of the webpage.
+    """
     driver.get(url)
     time.sleep(3)
     try:
@@ -54,6 +84,29 @@ def check_new_stages(driver, dates_left, url):
 
 
 def refresh_dates(driver, new_detected, dates_left, url, file_path):
+    """
+    Refreshes the dates for the given stages by scraping the webpage and
+    updates the dates_left dictionary.
+
+    Args:
+        driver (webdriver): The webdriver instance used to navigate the
+                            webpage.
+        new_detected (list): A list of stage IDs to refresh dates for.
+        dates_left (dict): A dictionary to store the refreshed dates for each
+                           stage.
+        url (str): The URL of the webpage to scrape.
+        file_path (str): The file path to save the updated dates_left
+                         dictionary.
+
+    Returns:
+        dict: The updated dates_left dictionary.
+
+    Notes:
+        This function uses BeautifulSoup to parse the HTML content of the
+        webpage and extract the matchday dates.
+        The extracted dates are then stored in the dates_left dictionary and
+        saved to a file.
+    """
     driver.get(url)
     time.sleep(3)
     for stage_id in new_detected:
@@ -76,6 +129,20 @@ def refresh_dates(driver, new_detected, dates_left, url, file_path):
 
 
 def new_results(ti, **op_kwargs):
+    """
+    Extracts new results from a website and updates the file with the new
+    results.
+
+    Args:
+        ti (TaskInstance): The task instance.
+        **op_kwargs: Additional keyword arguments.
+            - url (str): The URL of the website to extract results from.
+            - file_path (str): The path to the file containing the dates to
+                               scrape.
+
+    Returns:
+        bool: True if new results are found, False otherwise.
+    """
     url = op_kwargs['url']
     file_path = op_kwargs['file_path']
     driver = browser.open_browser()
@@ -170,7 +237,8 @@ def new_results(ti, **op_kwargs):
                              value=matches_ready[stage_id])
                 stages_ids_ready.append(stage_id)
             ti.xcom_push(key=f'groups', value=stages_ids_ready)
+            driver.quit()
             return True
         else:
+            driver.quit()
             return False
-    driver.quit()

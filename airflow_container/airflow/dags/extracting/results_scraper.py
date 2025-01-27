@@ -3,19 +3,31 @@ from bs4 import BeautifulSoup as bs
 import time
 from datetime import datetime
 from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
-import pandas as pd
-from bs4 import BeautifulSoup as bs
-import time
 from selenium.webdriver.common.by import By
-from datetime import datetime
 from extracting.utils import browser
-
-
-teams_link = 'https://baloncestoenvivo.feb.es/Equipo.aspx?i='
-matches_link = 'https://baloncestoenvivo.feb.es/Partido.aspx?p='
+from ..env_variables import *
 
 
 def matchday_scraper(soup, stage_id, category):
+    """
+    Scrapes match data from a given BeautifulSoup object representing a
+    matchday results page.
+
+    Args:
+        soup (BeautifulSoup): The BeautifulSoup object containing the webpage
+                              content to scrape.
+        stage_id (int): The identifier for the stage of the competition.
+        category (str): The category of the competition (e.g., league, cup).
+
+    Returns:
+        tuple: A tuple containing:
+            - pd.DataFrame: A DataFrame containing the scraped match data
+            - list: A list of match links
+
+    Raises:
+        Exception: If there is an error parsing any of the table rows.
+
+    """
     match_ids = []
     home_team_ids = []
     away_team_ids = []
@@ -85,6 +97,30 @@ def matchday_scraper(soup, stage_id, category):
 
 
 def getting_sql_query(ti, match_day, stage_id):
+    """
+    Constructs an SQL INSERT query and collects values from a DataFrame 
+    for inserting match results into a database table.
+
+    Args:
+        ti: TaskInstance object used to pull XCom data from previous tasks.
+        match_day: Integer representing the match day for which results are
+                   being processed.
+        stage_id: Identifier for the stage of the competition.
+
+    Returns:
+        tuple: A tuple containing:
+            - str: The constructed SQL INSERT query string.
+            - list: A flattened list of values to be inserted into the
+                    database.
+
+    The function retrieves a DataFrame from the XCom context, which contains
+    match results data. It then constructs an SQL INSERT statement by:
+    - Extracting column names from the DataFrame to form the column list.
+    - Creating placeholders for the SQL query based on the number of columns.
+    - Generating value tuples from the DataFrame's rows.
+    - Combining these elements into the final SQL query string.
+
+    """
     df = ti.xcom_pull(task_ids="scraping_results",
                       key=f"stage_id_{stage_id}_matchday_{match_day}_df_results")
     columns_sql = ", ".join([f'"{col}"' for col in df.columns])
@@ -99,6 +135,20 @@ def getting_sql_query(ti, match_day, stage_id):
 
 
 def inserting_to_postgres(ti, **op_kwargs):
+    """
+    Inserts data into a PostgreSQL database by executing SQL queries.
+    
+    This function pulls match data from XCom and executes SQL queries
+    to upload the data into a PostgreSQL database. It uses the
+    SQLExecuteQueryOperator to perform the database operations.
+    
+    Args:
+        ti (TaskInstance): The TaskInstance object from Airflow
+        **op_kwargs: Additional keyword arguments passed from the operator
+        
+    Returns:
+        None
+    """
     postgres_connection = op_kwargs['postgres_connection']
     stages_ids = ti.xcom_pull(task_ids='evaluate_matchdays', key='groups')
     for stage_id in stages_ids:
@@ -119,6 +169,37 @@ def inserting_to_postgres(ti, **op_kwargs):
 
 
 def results_scraper(ti, **op_kwargs):
+    """
+    Scrapes match results and related data from a sports website.
+
+    This function navigates through different stages and match days of a sports
+    competition, extracts the results, and stores them using Airflow's XCom for
+    further processing.
+
+    Args:
+        ti (TaskInstance): The Airflow TaskInstance object used for pushing and
+                           pulling XCom values.
+        **op_kwargs: A dictionary of keyword arguments containing the following
+                    keys:
+                    - url (str): The URL of the webpage to scrape.
+                    - category (str): The category of the sports competition
+                                      (e.g., "soccer", "basketball").
+
+    Returns:
+        None
+        This function does not return any value but pushes the following data
+        to XCom:
+            - For each stage and match day combination:
+                - A DataFrame containing the match results
+                    (key: stage_id_{stage_id}_matchday_{match_day}_df_results)
+                - A list of URLs linking to detailed match information
+                    (key: stage_id_{stage_id}_matchday_{match_day}_match_links)
+
+    Note:
+        This function is designed to be used within an Airflow DAG and relies
+        on the browser automation setup defined in the
+        airflow_container/airflow/dags/extracting/results_scraper.py file.
+    """
     url = op_kwargs["url"]
     category = op_kwargs["category"]
 

@@ -3,23 +3,26 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.exceptions import AirflowFailException
-from airflow.models import Variable
-import os
+from env_variables import *
 import extracting.checking_new_results as checking_new_results
 
 
-url_primera = Variable.get(key='url_primera_feb')
-url_segunda = Variable.get(key='url_segunda_feb')
-url_tercera = Variable.get(key='url_tercera_feb')
-file_path_primera = os.path.join(os.path.dirname(__file__),
-                                 'dates_files/dates_primera.txt')
-file_path_segunda = os.path.join(os.path.dirname(__file__),
-                                 'dates_files/dates_segunda.txt')
-file_path_tercera = os.path.join(os.path.dirname(__file__),
-                                 'dates_files/dates_tercera.txt')
-
-
 def trigger_evaluator_primera(ti):
+    """
+    This function checks if new matches were found to scrape. If no new matches
+    are found, it raises an AirflowFailException to stop further execution. If
+    new matches are found, it proceeds to trigger the next DAG.
+
+    Args:
+        ti (TaskInstance): The TaskInstance object containing execution context
+                           and information.
+
+    Returns:
+        None
+
+    Raises:
+        AirflowFailException: If no new matches are found to scrape.
+    """
     result_primera = ti.xcom_pull(task_ids='evaluate_and_trigger_primera',
                                   key='trigger_evaluator')
     if result_primera is False:
@@ -29,6 +32,26 @@ def trigger_evaluator_primera(ti):
 
 
 def trigger_evaluator_segunda(ti):
+    """
+    Triggers the next DAG if there are new matches to scrape.
+
+    Args:
+        ti (TaskInstance): The TaskInstance object containing context and
+                           information about the task.
+
+    Returns:
+        None: This function does not return any value.
+
+    Raises:
+        AirflowFailException: If there are no new matches to scrape,
+                              indicated by the result being False.
+
+    Note:
+        This function pulls a result from the 'evaluate_and_trigger_segunda'
+        task using XCom. If the result is False, it raises an exception to
+        halt further processing; otherwise, it proceeds to trigger the next
+        DAG.
+    """
     result_segunda = ti.xcom_pull(task_ids='evaluate_and_trigger_segunda',
                                   key='trigger_evaluator')
     if result_segunda is False:
@@ -38,6 +61,24 @@ def trigger_evaluator_segunda(ti):
 
 
 def trigger_evaluator_tercera(ti):
+    """
+    Checks if there are new matches to scrape and triggers the next DAG
+    accordingly.
+
+    This function pulls the result from the 'evaluate_and_trigger_tercera'
+    task.
+    If the result indicates no new matches, it raises an AirflowFailException
+    to stop further processing. Otherwise, it proceeds to trigger the next DAG.
+
+    Args:
+        ti (TaskInstance): The TaskInstance object from Airflow.
+
+    Returns:
+        None
+
+    Raises:
+        AirflowFailException: If there are no new matches to scrape.
+    """
     result_tercera = ti.xcom_pull(task_ids='evaluate_and_trigger_tercera',
                                   key='trigger_evaluator')
     if result_tercera is False:

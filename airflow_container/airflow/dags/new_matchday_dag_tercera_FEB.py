@@ -3,20 +3,12 @@ from airflow.operators.python import PythonOperator
 from airflow import DAG
 from airflow.utils.task_group import TaskGroup
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
-from airflow.models import Variable
-import os
+from env_variables import *
 import inserting_data.inserting_into_postgres as inserting_into_postgres
 import inserting_data.insert_into_mongo as insert_into_mongo
 import extracting.results_scraper as results_scraper
 import extracting.evaluating as evaluating
 import extracting.new_match_day as new_match_day
-
-category = 'tercera_feb'
-postgres_connection = 'cbmoron_dev'
-
-url = Variable.get(key='url_tercera_feb')
-file_path = os.path.join(os.path.dirname(__file__),
-                         'dates_files/dates_tercera.txt')
 
 
 with DAG(
@@ -31,24 +23,24 @@ with DAG(
     evaluate_matchdays = PythonOperator(
         task_id="evaluate_matchdays",
         python_callable=evaluating.new_results,
-        op_kwargs={'url': url, 'file_path': file_path}
+        op_kwargs={'url': url_tercera, 'file_path': file_path_tercera}
     )
 
     scraping_results = PythonOperator(
         task_id='scraping_results',
         python_callable=results_scraper.results_scraper,
-        op_kwargs={'url': url,
+        op_kwargs={'url': url_tercera,
                    'postgres_connection': postgres_connection,
-                   'category': category},
+                   'category': third_category},
         do_xcom_push=True
     )
 
     uploading_results = PythonOperator(
         task_id='results_insert_data',
         python_callable=results_scraper.inserting_to_postgres,
-        op_kwargs={'url': url,
+        op_kwargs={'url': url_tercera,
                    'postgres_connection': postgres_connection,
-                   'category': category},
+                   'category': third_category},
         do_xcom_push=True
     )
 
@@ -61,9 +53,9 @@ with DAG(
     insert_into_postgres_players = PythonOperator(
             task_id='players_matches_stats_insert_data',
             python_callable=inserting_into_postgres.players_matches_stats_insert_data,
-            op_kwargs={'url': url,
+            op_kwargs={'url': url_tercera,
                        'postgres_connection': postgres_connection,
-                       'category': category},
+                       'category': third_category},
             do_xcom_push=True
         )
 
@@ -80,36 +72,36 @@ with DAG(
         insert_into_postgres_teams = PythonOperator(
             task_id='teams_match_stats_insert_data',
             python_callable=inserting_into_postgres.teams_match_stats_insert_data,
-            op_kwargs={'url': url,
+            op_kwargs={'url': url_tercera,
                        'postgres_connection': postgres_connection,
-                       'category': category},
+                       'category': third_category},
             do_xcom_push=True
         )
 
         insert_into_postgres_match = PythonOperator(
             task_id='match_partials_insert_data',
             python_callable=inserting_into_postgres.match_partials_insert_data,
-            op_kwargs={'url': url,
+            op_kwargs={'url': url_tercera,
                        'postgres_connection': postgres_connection,
-                       'category': category},
+                       'category': third_category},
             do_xcom_push=True
         )
 
         insert_into_postgres_shootings = PythonOperator(
             task_id='shootings_insert_data',
             python_callable=inserting_into_postgres.shootings_insert_data,
-            op_kwargs={'url': url,
+            op_kwargs={'url': url_tercera,
                        'postgres_connection': postgres_connection,
-                       'category': category},
+                       'category': third_category},
             do_xcom_push=True
         )
 
         insert_into_postgres_available = PythonOperator(
             task_id='shooting_chart_availability_insert_data',
             python_callable=inserting_into_postgres.shooting_chart_availability_insert_data,
-            op_kwargs={'url': url,
+            op_kwargs={'url': url_tercera,
                        'postgres_connection': postgres_connection,
-                       'category': category},
+                       'category': third_category},
             do_xcom_push=True
         )
 

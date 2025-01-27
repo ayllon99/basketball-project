@@ -1,6 +1,5 @@
 # Build and compose postgres_container first
 
-
 PORTS:
 
 8080:8080---------airflow
@@ -24,4 +23,3 @@ PORTS:
 4443:4443---------selenium
 
 4444:4444---------selenium
-

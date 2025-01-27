@@ -2,6 +2,12 @@ from seleniumwire import webdriver
 
 
 def open_browser():
+    """
+    Establishes a remote Selenium connection with Chrome using Selenium Wire.
+
+    Returns:
+        webdriver.Remote: A remote Selenium webdriver instance with Chrome.
+    """
     # Address of the machine running Selenium Wire.
     # Explicitly use 127.0.0.1 rather than localhost
     # if remote session is running locally.
