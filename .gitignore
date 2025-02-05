@@ -1,3 +1,4 @@
 *.log
 /airflow_container/airflow/logs/*
+/airflow_container/airflow/dags/__pycache__/*
 *.pyc
